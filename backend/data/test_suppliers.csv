@@ -1,0 +1,4 @@
+SupplierId,SupplierName,Country,Rating,ContactEmail
+S001,ABC Manufacturing,China,4.5,abc@example.com
+S002,XYZ Parts Ltd,Japan,4.8,xyz@example.com
+S003,Tech Components Inc,USA,4.2,tech@example.com

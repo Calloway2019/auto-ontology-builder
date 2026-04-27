@@ -1,0 +1,6 @@
+ProductId,ProductName,Category,Price,Stock,SupplierId
+P001,Bolt A320,Fastener,12.5,1500,S001
+P002,Seal Ring R-4450,Seal,8.3,200,S002
+P003,Circuit Board CB-100,Electronics,156.0,50,S003
+P004,Connector C-200,Electronics,23.5,800,S001
+P005,Spring SP-50,Mechanical,5.2,3000,S002

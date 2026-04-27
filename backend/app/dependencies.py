@@ -1,0 +1,5 @@
+"""Dependency injection."""
+
+from app.models.database import get_db
+
+__all__ = ["get_db"]
