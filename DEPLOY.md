@@ -1,4 +1,4 @@
-# Auto Ontology Builder & QA System - 部署文档
+# Auto Ontology Builder & QA System - 离线部署文档
 
 ## 系统概述
 
@@ -8,244 +8,260 @@
 - **前端**: Vue 3 + TypeScript + Element Plus
 - **后端**: FastAPI + SQLAlchemy (async) + OpenAI SDK
 - **图数据库**: Neo4j 5.23 Community
-- **部署**: Docker Compose
+- **部署**: 纯 Docker run（无需 docker-compose）
 
 ---
 
-## 一、离线部署（Docker 镜像包）
+## 一、离线部署
 
 ### 1.1 前置条件
 
-目标服务器需安装：
-- Docker Engine >= 20.10
-- Docker Compose V2 (docker compose 命令)
+目标服务器需满足：
+- Linux 系统（CentOS 7+ / Ubuntu 20.04+ / Debian 11+）
+- 已安装 Docker Engine >= 20.10
+- 至少 8GB 内存（Neo4j 需要 4G+1G pagecache）
+- 磁盘空间 >= 5GB（用于镜像和数据）
 
-### 1.2 导入镜像
+**无需** docker-compose、无需外网。
 
-将以下 tar 文件复制到目标服务器：
+### 1.2 上传部署包
 
-```bash
-# 导入镜像
-docker load -i ontology-qa-backend.tar
-docker load -i ontology-qa-frontend.tar
-docker load -i neo4j-5.23-community.tar
+将 `deploy/` 目录下的所有文件上传到目标服务器同一目录：
+
+```
+ontology-qa/
+├── deploy.sh                    # 一键部署脚本
+├── stop.sh                      # 停止并清理容器
+├── status.sh                    # 查看运行状态
+├── .env                         # 环境配置文件
+├── neo4j-5.23-community.tar     # Neo4j 镜像 (487M)
+├── ontology-qa-backend.tar      # 后端镜像 (520M)
+├── ontology-qa-frontend.tar     # 前端镜像 (64M)
 ```
 
-### 1.3 准备配置文件
-
-在部署目录创建 `docker-compose.yml` 和 `.env` 文件：
+上传方式：SCP / SFTP / U盘拷贝均可。
 
 ```bash
+# 在目标服务器上
 mkdir -p /opt/ontology-qa
+# 将文件上传到此目录（SCP示例）
+# scp -r deploy/* user@target-server:/opt/ontology-qa/
+```
+
+### 1.3 修改配置
+
+编辑 `.env` 文件，填入实际参数：
+
+```bash
 cd /opt/ontology-qa
+vi .env
 ```
 
-**docker-compose.yml:**
-
-```yaml
-name: ontology-qa
-
-services:
-  neo4j:
-    image: neo4j:5.23-community
-    container_name: ontology-neo4j
-    ports:
-      - "7474:7474"
-      - "7687:7687"
-    environment:
-      NEO4J_AUTH: "neo4j/${NEO4J_PASSWORD:-ontology-qa-password}"
-      NEO4J_PLUGINS: '["apoc"]'
-      NEO4J_server_memory_heap_initial__size: "1G"
-      NEO4J_server_memory_heap_max__size: "4G"
-      NEO4J_server_memory_pagecache_size: "1G"
-    volumes:
-      - neo4j_data:/data
-      - neo4j_logs:/logs
-    healthcheck:
-      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "${NEO4J_PASSWORD:-ontology-qa-password}", "RETURN 1"]
-      interval: 10s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    networks:
-      - ontology-net
-    restart: unless-stopped
-
-  backend:
-    image: ontology-qa-backend:latest
-    container_name: ontology-backend
-    ports:
-      - "8000:8000"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    environment:
-      - NEO4J_URI=bolt://neo4j:7687
-      - NEO4J_USER=${NEO4J_USER:-neo4j}
-      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-ontology-qa-password}
-      - NEO4J_DATABASE=${NEO4J_DATABASE:-neo4j}
-      - LLM_API_KEY=${LLM_API_KEY:-your-api-key-here}
-      - LLM_BASE_URL=${LLM_BASE_URL:-http://172.16.2.237:80/xlm-gateway-ypxikm/sfm-api-gateway/gateway/compatible-mode/v1}
-      - LLM_MODEL_NAME=${LLM_MODEL_NAME:-qwen-7b}
-      - LLM_TEMPERATURE=${LLM_TEMPERATURE:-0.1}
-      - LLM_MAX_TOKENS=${LLM_MAX_TOKENS:-4096}
-      - LLM_TIMEOUT=${LLM_TIMEOUT:-120}
-      - UPLOAD_DIR=/app/data/uploads
-      - DATABASE_URL=sqlite:////app/data/metadata.db
-      - DEBUG=${DEBUG:-false}
-    volumes:
-      - app_data:/app/data
-    depends_on:
-      neo4j:
-        condition: service_healthy
-    networks:
-      - ontology-net
-    restart: unless-stopped
-
-  frontend:
-    image: ontology-qa-frontend:latest
-    container_name: ontology-frontend
-    ports:
-      - "80:80"
-    depends_on:
-      - backend
-    networks:
-      - ontology-net
-    restart: unless-stopped
-
-volumes:
-  neo4j_data:
-  neo4j_logs:
-  app_data:
-
-networks:
-  ontology-net:
-    driver: bridge
-```
-
-**.env 文件（按需修改）:**
+必须修改的配置：
 
 ```env
-# Neo4j
-NEO4J_PASSWORD=ontology-qa-password
+# Neo4j 密码
+NEO4J_PASSWORD=your-secure-password
 
-# LLM - 百炼 (阿里云)
-LLM_API_KEY=your-bailian-app-key
-LLM_BASE_URL=http://172.16.2.237:80/xlm-gateway-ypxikm/sfm-api-gateway/gateway/compatible-mode/v1
+# LLM API Key（百炼/DeepSeek/OpenAI 任选一个）
+LLM_API_KEY=your-api-key-here
+LLM_BASE_URL=http://your-llm-server/v1
 LLM_MODEL_NAME=qwen-7b
-
-# 如使用 DeepSeek，替换为：
-# LLM_API_KEY=sk-xxx
-# LLM_BASE_URL=https://api.deepseek.com/v1
-# LLM_MODEL_NAME=deepseek-chat
 ```
 
-### 1.4 启动服务
+可选修改的配置：
+
+```env
+# 数据持久化目录（默认 /opt/ontology-qa/data）
+DATA_DIR=/data/ontology-qa
+```
+
+### 1.4 一键部署
 
 ```bash
 cd /opt/ontology-qa
-docker compose up -d
+chmod +x deploy.sh stop.sh status.sh
+./deploy.sh
 ```
+
+部署脚本会自动执行：
+1. 从 tar 文件导入 Docker 镜像
+2. 创建 Docker 网络 `ontology-net`
+3. 创建数据目录
+4. 按顺序启动 Neo4j → Backend → Frontend
+5. 自动等待 Neo4j 就绪后再启动后端
 
 ### 1.5 验证部署
 
 ```bash
-# 检查容器状态
-docker compose ps
+# 查看状态
+./status.sh
 
-# 检查后端日志
-docker compose logs backend --tail 20
+# 检查容器
+docker ps
 
-# 验证 API
+# 预期输出:
+# ontology-frontend    RUNNING
+# ontology-backend     RUNNING
+# ontology-neo4j       RUNNING (healthy)
+
+# 测试后端 API
 curl http://localhost:8000/api/v1/system/health
+
+# 预期: {"code": 200, "data": {"status": "healthy", ...}}
 ```
 
 ### 1.6 访问系统
 
-| 服务 | 地址 |
-|------|------|
-| 前端界面 | http://<服务器IP>:80 |
-| 后端 API | http://<服务器IP>:8000 |
-| Neo4j Browser | http://<服务器IP>:7474 |
+| 服务 | 地址 | 说明 |
+|------|------|------|
+| 前端界面 | `http://<服务器IP>:80` | 用户操作界面 |
+| 后端 API | `http://<服务器IP>:8000` | RESTful API |
+| Neo4j | `http://<服务器IP>:7474` | Neo4j Browser |
 
 ---
 
-## 二、源码部署
+## 二、日常运维
 
-### 2.1 克隆代码
+### 2.1 查看状态
 
 ```bash
-git clone https://github.com/Calloway2019/auto-ontology-builder.git
-cd auto-ontology-builder
+./status.sh
 ```
 
-### 2.2 配置环境变量
+### 2.2 查看日志
 
 ```bash
-cp .env.example .env
-# 编辑 .env 填入实际的 LLM_API_KEY
+# 后端日志
+docker logs ontology-backend --tail 50 -f
+
+# 前端日志
+docker logs ontology-frontend --tail 50
+
+# Neo4j 日志
+docker logs ontology-neo4j --tail 50
 ```
 
-### 2.3 构建并启动
+### 2.3 停止服务
 
 ```bash
+./stop.sh
+```
+
+### 2.4 重新启动
+
+```bash
+./stop.sh && ./deploy.sh
+```
+
+### 2.5 更新 LLM 配置
+
+修改 `.env` 文件中的 LLM 配置后重启：
+
+```bash
+vi .env
+docker restart ontology-backend
+```
+
+---
+
+## 三、数据管理
+
+### 3.1 数据位置
+
+所有数据默认存储在 `${DATA_DIR}`（默认 `/opt/ontology-qa/data`）：
+
+```
+/opt/ontology-qa/data/
+├── uploads/          # 用户上传的 Excel/CSV 文件
+├── metadata.db       # SQLite 元数据（项目、数据源、本体定义）
+└── neo4j/
+    ├── data/         # Neo4j 图数据库
+    └── logs/         # Neo4j 日志
+```
+
+### 3.2 备份数据
+
+```bash
+# 打包备份
+tar czf ontology-qa-backup-$(date +%Y%m%d).tar.gz /opt/ontology-qa/data/
+```
+
+### 3.3 恢复数据
+
+```bash
+tar xzf ontology-qa-backup-YYYYMMDD.tar.gz -C /
+./deploy.sh
+```
+
+---
+
+## 四、LLM 配置说明
+
+系统支持任何 OpenAI SDK 兼容的 LLM 接口。前端 "LLM 模型配置" 页面提供预设选项。
+
+### 4.1 百炼（阿里云）
+
+```env
+LLM_BASE_URL=http://172.16.2.237:80/xlm-gateway-ypxikm/sfm-api-gateway/gateway/compatible-mode/v1
+LLM_MODEL_NAME=qwen-7b
+```
+
+### 4.2 DeepSeek
+
+```env
+LLM_BASE_URL=https://api.deepseek.com/v1
+LLM_MODEL_NAME=deepseek-chat
+```
+
+### 4.3 其他兼容格式
+
+只要是 `/v1/chat/completions` 兼容的接口均可使用。前端运行时可通过"LLM 配置"页面选择预设方案或自定义填写。
+
+> **注意**：`.env` 中的配置是默认值，重启容器后生效。运行时通过前端页面修改的配置仅存于内存。
+
+---
+
+## 五、常见问题
+
+### Q: Neo4j 启动很慢怎么办？
+
+A: Neo4j 首次启动需要初始化数据库，可能需要 1-2 分钟。部署脚本会自动等待就绪。可以通过 `docker logs ontology-neo4j` 查看进度。
+
+### Q: 内存不够怎么办？
+
+A: 可以在 `.env` 中调整 Neo4j 内存参数（修改 `deploy.sh` 中的环境变量），建议至少 8GB RAM。
+
+### Q: 如何更换 LLM 后端？
+
+A: 修改 `.env` 中的 `LLM_BASE_URL`、`LLM_MODEL_NAME`、`LLM_API_KEY`，然后 `docker restart ontology-backend`。
+
+### Q: 数据会丢失吗？
+
+A: 不会。数据通过 Docker Volume 映射到宿主机的 `${DATA_DIR}` 目录，容器删除重建不影响数据。
+
+---
+
+## 六、开发机打包命令
+
+在开发机上，完成代码修改后：
+
+```bash
+# 1. 构建最新镜像
 docker compose build
-docker compose up -d
+
+# 2. 导出为 tar 文件
+mkdir -p deploy
+docker save ontology-qa-backend:latest -o deploy/ontology-qa-backend.tar
+docker save ontology-qa-frontend:latest -o deploy/ontology-qa-frontend.tar
+docker save neo4j:5.23-community -o deploy/neo4j-5.23-community.tar
+
+# 3. 复制脚本和配置
+cp deploy/deploy.sh deploy/
+cp deploy/stop.sh deploy/
+cp deploy/status.sh deploy/
+cp deploy/.env deploy/
+
+# 4. 整体打包（可选）
+tar czf ontology-qa-deploy-$(date +%Y%m%d).tar.gz deploy/
 ```
-
----
-
-## 三、LLM 配置说明
-
-系统支持任何 OpenAI SDK 兼容的 LLM 接口。前端 "LLM 模型配置" 页面提供以下预设：
-
-| 预设 | Base URL | 模型 |
-|------|----------|------|
-| 百炼（阿里云） | http://172.16.2.237:80/xlm-gateway-ypxikm/sfm-api-gateway/gateway/compatible-mode/v1 | qwen-7b |
-| DeepSeek | https://api.deepseek.com/v1 | deepseek-chat |
-| OpenAI | https://api.openai.com/v1 | gpt-4o |
-| 自定义 | 用户自定义 | 用户自定义 |
-
-**配置方式：**
-1. 访问系统 → 左侧菜单 → "LLM 配置"
-2. 选择预设方案或自定义填写
-3. 输入 API Key
-4. 点击"测试连接"验证
-5. 点击"保存配置"
-
-> 注意：运行时通过页面配置的 LLM 设置仅存于内存，重启后恢复为 .env / docker-compose.yml 中的默认值。如需永久修改请编辑 .env 文件后重启。
-
----
-
-## 四、系统功能
-
-1. **数据管理** - 上传 Excel/CSV 数据表 + 字段描述文本，LLM 自动匹配列含义
-2. **本体构建** - 4 阶段 LLM 自动构建本体（Schema 分析 → 实体抽取 → 关系发现 → 校验优化）
-3. **知识图谱** - 基于本体定义将数据导入 Neo4j，支持可视化浏览
-4. **智能问答** - 自然语言提问 → LLM 生成 Cypher → Neo4j 查询 → LLM 合成回答
-
----
-
-## 五、注意事项
-
-1. **内存要求**: Neo4j 配置了 4G 堆内存 + 1G 页缓存，建议服务器至少 8G RAM
-2. **图谱隔离**: 每个项目的图谱数据通过 `_project_id` 属性隔离，互不影响
-3. **数据持久化**: Neo4j 数据和应用元数据通过 Docker Volume 持久化
-4. **网络**: 前端通过 nginx 反向代理访问后端 API（/api 路由转发到 backend:8000）
-
----
-
-## 六、打包镜像命令
-
-在开发机上执行以下命令导出镜像：
-
-```bash
-# 构建最新镜像
-docker compose build
-
-# 导出为 tar 文件
-docker save ontology-qa-backend:latest -o ontology-qa-backend.tar
-docker save ontology-qa-frontend:latest -o ontology-qa-frontend.tar
-docker save neo4j:5.23-community -o neo4j-5.23-community.tar
-```
-
-将三个 tar 文件以及 `docker-compose.yml` 和 `.env` 文件复制到目标机器即可部署。
