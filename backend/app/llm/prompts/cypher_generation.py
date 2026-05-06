@@ -8,10 +8,20 @@ def build_combined_intent_cypher_messages(
     question: str,
     ontology_summary: Dict,
     neo4j_schema: Dict,
+    project_id: str = None,
 ) -> list[dict[str, str]]:
     """Build LLM messages that combine intent recognition and Cypher generation in one step."""
 
-    system_prompt = """You are a Neo4j knowledge graph question-answering expert.
+    project_rule = ""
+    if project_id:
+        project_rule = (
+            f"\n6. IMPORTANT: All nodes have a ``_project_id`` property for data isolation. "
+            f"You MUST add a WHERE clause ``n._project_id = '{project_id}'`` (or "
+            f"equivalent inline property filter) on EVERY node pattern in your query "
+            f"to restrict results to the current project. Do NOT omit this filter."
+        )
+
+    system_prompt = f"""You are a Neo4j knowledge graph question-answering expert.
 Given a user's natural language question, the ontology schema, and the Neo4j database schema,
 you need to: 1) analyze the user's intent, 2) generate the corresponding Cypher query.
 
@@ -20,7 +30,7 @@ Rules:
 2. NEVER use CREATE, DELETE, SET, REMOVE, DROP, MERGE or any write operations
 3. Always add LIMIT (default 100) to prevent returning too much data
 4. Use parameterized values where possible
-5. Handle null values with COALESCE where appropriate
+5. Handle null values with COALESCE where appropriate{project_rule}
 
 Output strictly valid JSON, no extra text."""
 

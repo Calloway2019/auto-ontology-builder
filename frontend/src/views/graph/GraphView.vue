@@ -7,10 +7,10 @@
           <div class="toolbar">
             <el-button size="small" @click="refreshGraph">刷新</el-button>
             <el-select v-model="nodeLimit" size="small" style="width: 120px" @change="refreshGraph">
+              <el-option :value="30" label="30 节点" />
+              <el-option :value="50" label="50 节点" />
               <el-option :value="100" label="100 节点" />
               <el-option :value="300" label="300 节点" />
-              <el-option :value="500" label="500 节点" />
-              <el-option :value="1000" label="1000 节点" />
             </el-select>
           </div>
         </div>
@@ -68,7 +68,7 @@ const projectId = inject<any>('currentProjectId')
 const graphContainer = ref<HTMLElement | null>(null)
 const loading = ref(false)
 const stats = ref<any>(null)
-const nodeLimit = ref(500)
+const nodeLimit = ref(100)
 const showNodeDetail = ref(false)
 const selectedNode = ref<any>(null)
 let graphInstance: any = null

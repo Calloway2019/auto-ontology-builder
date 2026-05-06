@@ -108,7 +108,37 @@
         </el-descriptions>
 
         <h4 style="margin-top: 20px">实体定义</h4>
-        <el-table :data="ontology.entities" size="small" border style="margin-top: 8px">
+        <el-table :data="ontology.entities" size="small" border style="margin-top: 8px" row-key="name">
+          <el-table-column type="expand">
+            <template #default="{ row }">
+              <div style="padding: 8px 16px">
+                <p style="margin: 0 0 8px; font-weight: 600; color: #606266">{{ row.label || row.name }} 的属性列表：</p>
+                <el-table :data="row.properties || []" size="small" border>
+                  <el-table-column prop="name" label="属性名" width="160" />
+                  <el-table-column label="类型" width="100">
+                    <template #default="{ row: prop }">
+                      {{ prop.type || prop.dtype || '-' }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="description" label="描述" min-width="200">
+                    <template #default="{ row: prop }">
+                      {{ prop.description || '-' }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="来源表" width="140">
+                    <template #default="{ row: prop }">
+                      {{ prop.source_table || '-' }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="来源列" width="140">
+                    <template #default="{ row: prop }">
+                      {{ prop.source_column || '-' }}
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </div>
+            </template>
+          </el-table-column>
           <el-table-column prop="label" label="中文标签" width="150" />
           <el-table-column prop="name" label="实体名" width="180">
             <template #default="{ row }">

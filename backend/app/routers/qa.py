@@ -42,6 +42,7 @@ async def ask_question(
         question=req.question,
         ontology=ontology,
         context=req.context,
+        project_id=project_id,
     )
 
     # Save to history

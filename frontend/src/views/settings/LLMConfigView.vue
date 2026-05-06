@@ -1,6 +1,6 @@
 <template>
   <div class="llm-config-page">
-    <el-card shadow="never" style="max-width: 600px">
+    <el-card shadow="never" style="max-width: 700px">
       <template #header>
         <div style="display: flex; justify-content: space-between; align-items: center">
           <span>LLM 模型配置</span>
@@ -11,6 +11,17 @@
       </template>
 
       <el-form :model="config" label-width="120px">
+        <!-- Preset selector -->
+        <el-form-item label="预设方案">
+          <el-select v-model="selectedPreset" @change="handlePresetChange" placeholder="选择预设或自定义">
+            <el-option label="DeepSeek" value="deepseek" />
+            <el-option label="百炼（阿里云）" value="bailian" />
+            <el-option label="OpenAI" value="openai" />
+            <el-option label="自定义" value="custom" />
+          </el-select>
+          <div class="input-tip">选择预设方案将自动填充 API 地址和模型名称</div>
+        </el-form-item>
+
         <el-form-item label="API Base URL">
           <el-input v-model="config.base_url" placeholder="https://api.deepseek.com/v1" />
           <div class="input-tip">Docker 部署时，如使用本地模型请用 http://host.docker.internal:端口/v1 替代 localhost</div>
@@ -32,7 +43,9 @@
 
         <el-form-item label="模型名称">
           <el-input v-model="config.model_name" placeholder="deepseek-chat" />
-          <div class="input-tip">常见模型: deepseek-chat, qwen-72b, gpt-4o, chatglm4</div>
+          <div class="input-tip">
+            常见模型: deepseek-chat, qwen-7b, qwen-72b, gpt-4o, chatglm4
+          </div>
         </el-form-item>
 
         <el-form-item style="margin-top: 20px">
@@ -56,7 +69,7 @@
     </el-card>
 
     <!-- System Health -->
-    <el-card shadow="never" style="max-width: 600px; margin-top: 16px">
+    <el-card shadow="never" style="max-width: 700px; margin-top: 16px">
       <template #header>
         <div style="display: flex; justify-content: space-between; align-items: center">
           <span>系统状态</span>
@@ -90,6 +103,26 @@ import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getSystemConfig, updateLLMConfig, testLLMConnection, healthCheck } from '@/api/llm'
 
+interface Preset {
+  base_url: string
+  model_name: string
+}
+
+const presets: Record<string, Preset> = {
+  deepseek: {
+    base_url: 'https://api.deepseek.com/v1',
+    model_name: 'deepseek-chat',
+  },
+  bailian: {
+    base_url: 'http://172.16.2.237:80/xlm-gateway-ypxikm/sfm-api-gateway/gateway/compatible-mode/v1',
+    model_name: 'qwen-7b',
+  },
+  openai: {
+    base_url: 'https://api.openai.com/v1',
+    model_name: 'gpt-4o',
+  },
+}
+
 const config = ref({
   api_key: '',
   base_url: 'https://api.deepseek.com/v1',
@@ -98,12 +131,28 @@ const config = ref({
   max_tokens: 4096,
 })
 
+const selectedPreset = ref('deepseek')
 const showKey = ref(false)
 const saving = ref(false)
 const testing = ref(false)
 const testResult = ref<any>(null)
 const health = ref<any>(null)
 const configStatus = ref<'loading' | 'configured' | 'not_configured'>('loading')
+
+function handlePresetChange(val: string) {
+  const preset = presets[val]
+  if (preset) {
+    config.value.base_url = preset.base_url
+    config.value.model_name = preset.model_name
+  }
+}
+
+function detectPreset(baseUrl: string): string {
+  for (const [key, preset] of Object.entries(presets)) {
+    if (baseUrl === preset.base_url) return key
+  }
+  return 'custom'
+}
 
 async function loadConfig() {
   try {
@@ -113,7 +162,7 @@ async function loadConfig() {
       config.value.base_url = llm.base_url || config.value.base_url
       config.value.model_name = llm.model_name || config.value.model_name
       configStatus.value = llm.is_configured ? 'configured' : 'not_configured'
-      // Don't overwrite API key if masked
+      selectedPreset.value = detectPreset(config.value.base_url)
       if (llm.api_key && !llm.api_key.includes('****')) {
         config.value.api_key = llm.api_key
       }
@@ -142,7 +191,6 @@ async function handleTest() {
   testing.value = true
   testResult.value = null
   try {
-    // Save first, then test
     await updateLLMConfig(config.value)
     const res = await testLLMConnection()
     testResult.value = res.data

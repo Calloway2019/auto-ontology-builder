@@ -19,6 +19,7 @@ class ImportPipeline:
     async def load_data_to_graph(
         ontology: Dict,
         datasources: List[Dict],
+        project_id: str = None,
     ) -> Dict:
         """
         Load data into Neo4j based on ontology definition.
@@ -44,7 +45,7 @@ class ImportPipeline:
                 logger.error("Failed to read datasource %s: %s", ds["name"], e)
 
         # Create schema (constraints/indexes)
-        await graph_manager.create_schema(ontology)
+        await graph_manager.create_schema(ontology, project_id=project_id)
 
         # Load entities
         for entity in ontology.get("entities", []):
@@ -76,7 +77,7 @@ class ImportPipeline:
                             merged_rows.append(data_row)
 
                 if merged_rows:
-                    count = await graph_manager.load_entity_data(entity, merged_rows)
+                    count = await graph_manager.load_entity_data(entity, merged_rows, project_id=project_id)
                     total_nodes += count
                     logger.info("Loaded %d nodes for entity %s", count, entity["name"])
                 else:
@@ -107,7 +108,7 @@ class ImportPipeline:
                         logger.warning("Relation %s: target_key '%s' not in %s properties %s",
                                        relation["name"], tgt_key, tgt_entity_name, tgt_prop_names)
 
-                count = await graph_manager.load_relation_data(relation)
+                count = await graph_manager.load_relation_data(relation, project_id=project_id)
                 total_relations += count
                 logger.info("Loaded %d relations for %s", count, relation["name"])
             except Exception as e:

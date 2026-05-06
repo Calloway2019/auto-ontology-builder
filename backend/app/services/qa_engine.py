@@ -22,6 +22,7 @@ class QAEngine:
         question: str,
         ontology: Dict,
         context: str = "",
+        project_id: str = None,
     ) -> Dict:
         """
         Process a natural language question through the 2-step pipeline.
@@ -70,7 +71,7 @@ class QAEngine:
             logger.info("QA Step 1: Combined intent + Cypher for: %s", question[:100])
             neo4j_schema = await graph_manager.get_neo4j_schema()
             combined_messages = build_combined_intent_cypher_messages(
-                question, ontology_summary, neo4j_schema
+                question, ontology_summary, neo4j_schema, project_id=project_id
             )
             combined_result = await llm_client.chat_completion_json(combined_messages)
 

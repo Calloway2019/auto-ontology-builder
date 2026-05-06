@@ -37,10 +37,10 @@ async def _run_graph_load(project_id: str, ontology: dict, datasources_info: lis
         task_id = task.id
 
     try:
-        # Clear existing graph data
-        await graph_manager.clear_graph()
+        # Clear existing graph data **for this project only**
+        await graph_manager.clear_graph(project_id=project_id)
 
-        result = await ImportPipeline.load_data_to_graph(ontology, datasources_info)
+        result = await ImportPipeline.load_data_to_graph(ontology, datasources_info, project_id=project_id)
 
         async with async_session() as db:
             task_result = await db.execute(select(ImportTask).where(ImportTask.id == task_id))
@@ -137,14 +137,14 @@ async def get_graph_stats(project_id: str, db: AsyncSession = Depends(get_db)):
     project = result.scalar_one_or_none()
     ontology = json.loads(project.ontology_json) if project and project.ontology_json else {}
     label_map = _build_label_map(ontology)
-    stats = await graph_manager.get_graph_stats(label_map=label_map)
+    stats = await graph_manager.get_graph_stats(label_map=label_map, project_id=project_id)
     return ApiResponse(data=stats)
 
 
 @router.get("/visualize")
 async def get_graph_visualization(
     project_id: str,
-    limit: int = 500,
+    limit: int = 100,
     node_types: Optional[str] = None,
     rel_types: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
@@ -157,7 +157,7 @@ async def get_graph_visualization(
 
     nt = node_types.split(",") if node_types else None
     rt = rel_types.split(",") if rel_types else None
-    data = await graph_manager.get_graph_visualization(limit=limit, node_types=nt, rel_types=rt, label_map=label_map)
+    data = await graph_manager.get_graph_visualization(limit=limit, node_types=nt, rel_types=rt, label_map=label_map, project_id=project_id)
     return ApiResponse(data=data)
 
 
@@ -178,5 +178,5 @@ async def query_graph(project_id: str, query: CypherQuery):
 @router.delete("/clear")
 async def clear_graph(project_id: str):
     """Clear all graph data."""
-    await graph_manager.clear_graph()
+    await graph_manager.clear_graph(project_id=project_id)
     return ApiResponse(message="Graph cleared")

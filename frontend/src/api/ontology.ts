@@ -34,3 +34,14 @@ export function previewDatasource(projectId: string, dsId: string) {
 export function deleteDatasource(projectId: string, dsId: string) {
   return request.delete(`/v1/projects/${projectId}/datasources/${dsId}`)
 }
+
+export function updateColumnDescriptions(projectId: string, dsId: string, columns: { name: string; description: string }[]) {
+  return request.put(`/v1/projects/${projectId}/datasources/${dsId}/columns`, columns)
+}
+
+export function uploadWithDesc(projectId: string, dataFile: File, descText: string) {
+  const formData = new FormData()
+  formData.append('data_file', dataFile)
+  formData.append('desc_text', descText)
+  return request.post(`/v1/projects/${projectId}/datasources/upload-with-desc`, formData)
+}
